@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mouse Keyer Input Test</title>
+<style>
+  body {
+    font-family: -apple-system, system-ui, sans-serif;
+    background: #111;
+    color: #eee;
+    margin: 0;
+    padding: 16px;
+  }
+  h1 { font-size: 1.2rem; margin: 0 0 4px 0; }
+  p.sub { color: #999; font-size: 0.85rem; margin: 0 0 16px 0; }
+
+  .state {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .indicator {
+    flex: 1;
+    padding: 24px 0;
+    text-align: center;
+    border-radius: 10px;
+    background: #222;
+    border: 2px solid #333;
+    font-size: 1.1rem;
+    font-weight: 600;
+    transition: background 0.05s, border-color 0.05s;
+  }
+  .indicator.active {
+    background: #1a4d1a;
+    border-color: #3ecf3e;
+  }
+  .indicator .label { display: block; font-size: 0.75rem; color: #999; margin-bottom: 4px; }
+
+  #clear {
+    background: #333;
+    color: #eee;
+    border: 1px solid #555;
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    margin-bottom: 12px;
+  }
+
+  #log {
+    background: #000;
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 10px;
+    height: 60vh;
+    overflow-y: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    white-space: pre;
+  }
+  .down { color: #6fd66f; }
+  .up   { color: #d6a56f; }
+  .dt   { color: #666; }
+</style>
+</head>
+<body>
+
+<h1>Mouse Keyer Input Test</h1>
+<p class="sub">Connect your keyer via USB-C (or Bluetooth), then press dot/dash. This logs raw mousedown/mouseup events with high-precision timestamps so you can check for jitter or dropped events.</p>
+
+<div class="state">
+  <div class="indicator" id="leftInd"><span class="label">LEFT (button 0)</span><span id="leftText">up</span></div>
+  <div class="indicator" id="rightInd"><span class="label">RIGHT (button 2)</span><span id="rightText">up</span></div>
+</div>
+
+<button id="clear">Clear log</button>
+<div id="log"></div>
+
+<script>
+  const logEl = document.getElementById('log');
+  const leftInd = document.getElementById('leftInd');
+  const rightInd = document.getElementById('rightInd');
+  const leftText = document.getElementById('leftText');
+  const rightText = document.getElementById('rightText');
+
+  let lastTime = null;
+  let eventCount = 0;
+
+  // Prevent the right-click context menu from interrupting testing
+  document.addEventListener('contextmenu', e => e.preventDefault());
+
+  function buttonName(button) {
+    if (button === 0) return 'LEFT ';
+    if (button === 2) return 'RIGHT';
+    if (button === 1) return 'MID  ';
+    return 'BTN' + button;
+  }
+
+  function updateIndicator(button, isDown) {
+    if (button === 0) {
+      leftInd.classList.toggle('active', isDown);
+      leftText.textContent = isDown ? 'DOWN' : 'up';
+    } else if (button === 2) {
+      rightInd.classList.toggle('active', isDown);
+      rightText.textContent = isDown ? 'DOWN' : 'up';
+    }
+  }
+
+  function logEvent(type, e) {
+    const now = performance.now();
+    const dt = lastTime !== null ? (now - lastTime).toFixed(1) : '---';
+    lastTime = now;
+    eventCount++;
+
+    const cls = type === 'down' ? 'down' : 'up';
+    const label = type === 'down' ? 'DOWN' : 'UP  ';
+    const line = document.createElement('div');
+    line.innerHTML =
+      `<span class="dt">#${String(eventCount).padStart(4,'0')} +${dt.padStart(7,' ')}ms</span> ` +
+      `<span class="${cls}">${buttonName(e.button)} ${label}</span>`;
+    logEl.appendChild(line);
+    logEl.scrollTop = logEl.scrollHeight;
+
+    // Keep the log from growing unbounded during a long test session
+    while (logEl.childNodes.length > 500) {
+      logEl.removeChild(logEl.firstChild);
+    }
+  }
+
+  document.addEventListener('mousedown', (e) => {
+    updateIndicator(e.button, true);
+    logEvent('down', e);
+  });
+
+  document.addEventListener('mouseup', (e) => {
+    updateIndicator(e.button, false);
+    logEvent('up', e);
+  });
+
+  document.getElementById('clear').addEventListener('click', () => {
+    logEl.innerHTML = '';
+    eventCount = 0;
+    lastTime = null;
+  });
+</script>
+
+</body>
+</html>
