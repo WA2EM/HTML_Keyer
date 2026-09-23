@@ -3,126 +3,145 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Keyer Event Firehose</title>
+<title>Mouse Keyer Input Test</title>
 <style>
-  html, body {
-    height: 100%;
-    margin: 0;
-    touch-action: none; /* stop page scroll/zoom from eating gestures we want to see */
-  }
   body {
     font-family: -apple-system, system-ui, sans-serif;
     background: #111;
     color: #eee;
-    padding: 12px;
-    box-sizing: border-box;
-    display: flex;
-    flex-direction: column;
-    height: 100%;
+    margin: 0;
+    padding: 16px;
   }
-  h1 { font-size: 1.05rem; margin: 0 0 4px 0; }
-  p.sub { color: #999; font-size: 0.78rem; margin: 0 0 10px 0; }
+  h1 { font-size: 1.2rem; margin: 0 0 4px 0; }
+  p.sub { color: #999; font-size: 0.85rem; margin: 0 0 16px 0; }
 
-  #controls { display: flex; gap: 8px; margin-bottom: 10px; }
-  button {
-    background: #333; color: #eee; border: 1px solid #555;
-    padding: 8px 12px; border-radius: 6px; font-size: 0.85rem;
+  .state {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
   }
-  #status { font-size: 0.8rem; color: #6fd66f; margin-bottom: 8px; }
+  .indicator {
+    flex: 1;
+    padding: 24px 0;
+    text-align: center;
+    border-radius: 10px;
+    background: #222;
+    border: 2px solid #333;
+    font-size: 1.1rem;
+    font-weight: 600;
+    transition: background 0.05s, border-color 0.05s;
+  }
+  .indicator.active {
+    background: #1a4d1a;
+    border-color: #3ecf3e;
+  }
+  .indicator .label { display: block; font-size: 0.75rem; color: #999; margin-bottom: 4px; }
+
+  #clear {
+    background: #333;
+    color: #eee;
+    border: 1px solid #555;
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    margin-bottom: 12px;
+  }
 
   #log {
-    flex: 1;
     background: #000;
     border: 1px solid #333;
     border-radius: 8px;
-    padding: 8px;
+    padding: 10px;
+    height: 60vh;
     overflow-y: auto;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 0.72rem;
+    font-size: 0.8rem;
     line-height: 1.5;
+    white-space: pre;
   }
-  .row { white-space: pre-wrap; word-break: break-word; border-bottom: 1px solid #1a1a1a; padding: 2px 0; }
-  .type-touch   { color: #6fbef2; }
-  .type-pointer { color: #f2c96f; }
-  .type-mouse   { color: #6fd66f; }
-  .type-key     { color: #d66fd6; }
-  .type-other   { color: #999; }
-  .dt { color: #666; }
+  .down { color: #6fd66f; }
+  .up   { color: #d6a56f; }
+  .dt   { color: #666; }
 </style>
 </head>
 <body>
 
-<h1>Keyer Event Firehose</h1>
-<p class="sub">Logs every touch / pointer / mouse / keyboard event this page receives, with raw properties. Press your keyer's buttons and read what actually shows up below — don't assume, just look.</p>
+<h1>Mouse Keyer Input Test</h1>
+<p class="sub">Connect your keyer via USB-C (or Bluetooth), then press dot/dash. This logs raw mousedown/mouseup events with high-precision timestamps so you can check for jitter or dropped events.</p>
 
-<div id="controls">
-  <button id="clear">Clear</button>
+<div class="state">
+  <div class="indicator" id="leftInd"><span class="label">LEFT (button 0)</span><span id="leftText">up</span></div>
+  <div class="indicator" id="rightInd"><span class="label">RIGHT (button 2)</span><span id="rightText">up</span></div>
 </div>
-<div id="status">Waiting for input…</div>
 
+<button id="clear">Clear log</button>
 <div id="log"></div>
 
 <script>
   const logEl = document.getElementById('log');
-  const statusEl = document.getElementById('status');
-  let lastTime = null;
-  let count = 0;
+  const leftInd = document.getElementById('leftInd');
+  const rightInd = document.getElementById('rightInd');
+  const leftText = document.getElementById('leftText');
+  const rightText = document.getElementById('rightText');
 
+  let lastTime = null;
+  let eventCount = 0;
+
+  // Prevent the right-click context menu from interrupting testing
   document.addEventListener('contextmenu', e => e.preventDefault());
 
-  function line(cls, text) {
+  function buttonName(button) {
+    if (button === 0) return 'LEFT ';
+    if (button === 2) return 'RIGHT';
+    if (button === 1) return 'MID  ';
+    return 'BTN' + button;
+  }
+
+  function updateIndicator(button, isDown) {
+    if (button === 0) {
+      leftInd.classList.toggle('active', isDown);
+      leftText.textContent = isDown ? 'DOWN' : 'up';
+    } else if (button === 2) {
+      rightInd.classList.toggle('active', isDown);
+      rightText.textContent = isDown ? 'DOWN' : 'up';
+    }
+  }
+
+  function logEvent(type, e) {
     const now = performance.now();
     const dt = lastTime !== null ? (now - lastTime).toFixed(1) : '---';
     lastTime = now;
-    count++;
-    const div = document.createElement('div');
-    div.className = 'row ' + cls;
-    div.textContent = `#${String(count).padStart(4,'0')} +${dt.padStart(7,' ')}ms  ${text}`;
-    logEl.appendChild(div);
+    eventCount++;
+
+    const cls = type === 'down' ? 'down' : 'up';
+    const label = type === 'down' ? 'DOWN' : 'UP  ';
+    const line = document.createElement('div');
+    line.innerHTML =
+      `<span class="dt">#${String(eventCount).padStart(4,'0')} +${dt.padStart(7,' ')}ms</span> ` +
+      `<span class="${cls}">${buttonName(e.button)} ${label}</span>`;
+    logEl.appendChild(line);
     logEl.scrollTop = logEl.scrollHeight;
-    while (logEl.childNodes.length > 600) logEl.removeChild(logEl.firstChild);
-    statusEl.textContent = `Last event: ${text}`;
+
+    // Keep the log from growing unbounded during a long test session
+    while (logEl.childNodes.length > 500) {
+      logEl.removeChild(logEl.firstChild);
+    }
   }
 
-  // --- Touch events ---
-  ['touchstart', 'touchend', 'touchcancel'].forEach(type => {
-    document.addEventListener(type, (e) => {
-      const t = e.changedTouches[0];
-      line('type-touch', `TOUCH ${type}  touches=${e.touches.length} id=${t ? t.identifier : '?'} x=${t ? Math.round(t.clientX) : '?'} y=${t ? Math.round(t.clientY) : '?'} target=<${e.target.tagName.toLowerCase()}>`);
-    }, { passive: true });
+  document.addEventListener('mousedown', (e) => {
+    updateIndicator(e.button, true);
+    logEvent('down', e);
   });
 
-  // --- Pointer events ---
-  ['pointerdown', 'pointerup', 'pointercancel'].forEach(type => {
-    document.addEventListener(type, (e) => {
-      line('type-pointer', `POINTER ${type}  pointerType=${e.pointerType} button=${e.button} buttons=${e.buttons} id=${e.pointerId} isPrimary=${e.isPrimary} x=${Math.round(e.clientX)} y=${Math.round(e.clientY)}`);
-    });
-  });
-
-  // --- Mouse events ---
-  ['mousedown', 'mouseup', 'click', 'auxclick'].forEach(type => {
-    document.addEventListener(type, (e) => {
-      line('type-mouse', `MOUSE ${type}  button=${e.button} buttons=${e.buttons} x=${Math.round(e.clientX)} y=${Math.round(e.clientY)}`);
-    });
-  });
-
-  // --- Keyboard events (in case the device emulates a keyboard instead) ---
-  ['keydown', 'keyup'].forEach(type => {
-    document.addEventListener(type, (e) => {
-      line('type-key', `KEY ${type}  key="${e.key}" code="${e.code}"`);
-    });
-  });
-
-  // --- Gamepad API (unlikely to apply, but cheap to check) ---
-  window.addEventListener('gamepadconnected', (e) => {
-    line('type-other', `GAMEPAD connected: ${e.gamepad.id}`);
+  document.addEventListener('mouseup', (e) => {
+    updateIndicator(e.button, false);
+    logEvent('up', e);
   });
 
   document.getElementById('clear').addEventListener('click', () => {
     logEl.innerHTML = '';
-    count = 0;
+    eventCount = 0;
     lastTime = null;
-    statusEl.textContent = 'Waiting for input…';
   });
 </script>
 
